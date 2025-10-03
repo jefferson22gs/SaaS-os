@@ -129,14 +129,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => {
         setError(null);
-        const { data: authData, error: authError } = await supabase.auth.signUp({ email: ownerData.email, password: ownerData.password as string });
+        // Pass user metadata during sign-up. This is read by the `handle_new_user` trigger in the database.
+        // This is the fix for the 500 error on registration.
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: ownerData.email,
+            password: ownerData.password as string,
+            options: {
+                data: {
+                    name: ownerData.name,
+                    role: UserRole.Owner
+                }
+            }
+        });
+
         if (authError) return setError(authError.message);
         if (!authData.user) return setError("Não foi possível criar o usuário.");
 
         const { data: smData, error: smError } = await supabase.from('supermarkets').insert({ ...supermarketData, owner_id: authData.user.id }).select().single();
         if (smError) return setError(smError.message);
 
-        const { error: profileError } = await supabase.from('users').update({ name: ownerData.name, role: UserRole.Owner, supermarket_id: smData.id }).eq('id', authData.user.id);
+        // The trigger now handles inserting name and role. We only need to update the supermarket_id.
+        const { error: profileError } = await supabase.from('users').update({ supermarket_id: smData.id }).eq('id', authData.user.id);
         if (profileError) return setError(profileError.message);
     };
 
@@ -243,16 +256,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return setError("Você precisa estar logado como proprietário.");
 
+        // Pass metadata during sign-up to be used by the database trigger.
         const { data: newUser, error: signUpError } = await supabase.auth.signUp({
             email: operatorData.email,
-            password: operatorData.password as string
+            password: operatorData.password as string,
+            options: {
+                data: {
+                    name: operatorData.name,
+                    role: UserRole.Operator
+                }
+            }
         });
         if (signUpError) return setError(signUpError.message);
         if (!newUser.user) return setError("Não foi possível criar o operador.");
 
+        // The trigger now handles inserting name and role. We only need to update the supermarket_id.
         const { error: profileError } = await supabase.from('users').update({
-            name: operatorData.name,
-            role: UserRole.Operator,
             supermarket_id: supermarket.id
         }).eq('id', newUser.user.id);
 
