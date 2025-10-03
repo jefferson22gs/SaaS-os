@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button, Input, Card } from './UI';
 import { useAppContext } from '../contexts/AppContext';
@@ -8,14 +7,18 @@ export const LoginPage: React.FC = () => {
     const { login, error, clearError } = useAppContext();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         clearError();
     }, [clearError]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        login(email, password);
+        if (loading) return;
+        setLoading(true);
+        await login(email, password);
+        setLoading(false); // Only sets on error, which is fine as component unmounts on success
     };
 
     return (
@@ -26,7 +29,9 @@ export const LoginPage: React.FC = () => {
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                     <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                    <Button type="submit" className="w-full !py-3">Entrar</Button>
+                    <Button type="submit" className="w-full !py-3" disabled={loading}>
+                        {loading ? 'Entrando...' : 'Entrar'}
+                    </Button>
                 </form>
                  <p className="text-center mt-4 text-sm text-text-secondary">
                     Não tem uma conta de proprietário? <a href="#/register" className="font-semibold text-primary hover:underline">Cadastre-se</a>
@@ -48,6 +53,7 @@ export const RegisterPage: React.FC = () => {
     const [ie, setIe] = useState('');
     const [address, setAddress] = useState('');
     const [phone, setPhone] = useState('');
+    const [loading, setLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -65,12 +71,15 @@ export const RegisterPage: React.FC = () => {
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        register(
+        if (loading) return;
+        setLoading(true);
+        await register(
             { name: ownerName, email, password },
             { name: supermarketName, logo, theme, cnpj, ie, address, phone }
         );
+        setLoading(false);
     };
 
     return (
@@ -115,7 +124,9 @@ export const RegisterPage: React.FC = () => {
                     <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                     <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
 
-                    <Button type="submit" className="w-full !py-3 mt-4">Criar Conta</Button>
+                    <Button type="submit" className="w-full !py-3 mt-4" disabled={loading}>
+                        {loading ? 'Criando Conta...' : 'Criar Conta'}
+                    </Button>
                 </form>
                  <p className="text-center mt-4 text-sm text-text-secondary">
                     Já tem uma conta? <a href="#/" className="font-semibold text-primary hover:underline">Faça Login</a>

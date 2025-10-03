@@ -129,8 +129,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => {
         setError(null);
-        // Pass user metadata during sign-up. This is read by the `handle_new_user` trigger in the database.
-        // This is the fix for the 500 error on registration.
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: ownerData.email,
             password: ownerData.password as string,
@@ -142,13 +140,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         });
 
-        if (authError) return setError(authError.message);
+        if (authError) {
+            if (authError.message.includes('For security purposes')) {
+                setError("Muitas tentativas de cadastro. Por favor, aguarde um minuto antes de tentar novamente.");
+            } else if (authError.message.toLowerCase().includes('user already registered')) {
+                setError("Este email já está cadastrado. Por favor, use um email diferente ou faça login.");
+            } else {
+                setError(authError.message);
+            }
+            return;
+        }
+        
         if (!authData.user) return setError("Não foi possível criar o usuário.");
 
         const { data: smData, error: smError } = await supabase.from('supermarkets').insert({ ...supermarketData, owner_id: authData.user.id }).select().single();
-        if (smError) return setError(smError.message);
+        if (smError) {
+            if (smError.message.includes('violates row-level security policy')) {
+                setError("Erro de permissão no banco de dados. Verifique as políticas de segurança (RLS) para a tabela 'supermarkets' e tente novamente.");
+            } else {
+                setError(smError.message);
+            }
+            return;
+        }
 
-        // The trigger now handles inserting name and role. We only need to update the supermarket_id.
         const { error: profileError } = await supabase.from('users').update({ supermarket_id: smData.id }).eq('id', authData.user.id);
         if (profileError) return setError(profileError.message);
     };
