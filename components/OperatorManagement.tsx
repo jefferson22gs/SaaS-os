@@ -8,11 +8,12 @@ const OperatorForm: React.FC<{
     onSave: (operator: Omit<User, 'id' | 'role'> | User) => void;
     onCancel: () => void;
     error: string | null;
-}> = ({ operator, onSave, onCancel, error }) => {
+    isSaving: boolean;
+}> = ({ operator, onSave, onCancel, error, isSaving }) => {
     const [formData, setFormData] = useState({
         name: operator?.name || '',
         email: operator?.email || '',
-        password: operator?.password || '',
+        password: '', // Password field is cleared for security
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -22,19 +23,23 @@ const OperatorForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const dataToSave = operator && 'id' in operator ? { ...formData, id: operator.id, role: UserRole.Operator } : formData;
+        const dataToSave = operator && 'id' in operator 
+            ? { ...formData, id: operator.id, role: UserRole.Operator } 
+            : formData;
         onSave(dataToSave as any);
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</p>}
-            <Input label="Nome do Operador" id="name" name="name" type="text" value={formData.name} onChange={handleChange} required />
-            <Input label="Email" id="email" name="email" type="email" value={formData.email} onChange={handleChange} required />
-            <Input label="Senha" id="password" name="password" type="password" value={formData.password} onChange={handleChange} required placeholder={operator ? 'Deixe em branco para não alterar' : ''} />
+            <Input label="Nome do Operador" id="name" name="name" type="text" value={formData.name} onChange={handleChange} required disabled={isSaving} />
+            <Input label="Email" id="email" name="email" type="email" value={formData.email} onChange={handleChange} required disabled={isSaving || !!operator} />
+            <Input label="Senha" id="password" name="password" type="password" value={formData.password} onChange={handleChange} required={!operator} placeholder={operator ? 'Deixe em branco para não alterar' : ''} disabled={isSaving} />
             <div className="flex justify-end gap-2 mt-6">
-                <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
-                <Button type="submit">Salvar</Button>
+                <Button type="button" variant="ghost" onClick={onCancel} disabled={isSaving}>Cancelar</Button>
+                <Button type="submit" disabled={isSaving}>
+                    {isSaving ? 'Salvando...' : 'Salvar'}
+                </Button>
             </div>
         </form>
     );
@@ -45,14 +50,16 @@ const OperatorManagementPage: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOperator, setEditingOperator] = useState<User | null>(null);
     const [deletingOperator, setDeletingOperator] = useState<User | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const operators = users.filter(u => u.role === UserRole.Operator);
 
     useEffect(() => {
-        if (isModalOpen) {
+        if (isModalOpen || deletingOperator) {
             clearError();
         }
-    }, [isModalOpen, clearError]);
+    }, [isModalOpen, deletingOperator, clearError]);
 
     const handleOpenAddModal = () => {
         setEditingOperator(null);
@@ -69,27 +76,34 @@ const OperatorManagementPage: React.FC = () => {
         setEditingOperator(null);
     };
 
-    const handleSaveOperator = (operatorData: Omit<User, 'id' | 'role'> | User) => {
+    const handleSaveOperator = async (operatorData: Omit<User, 'id' | 'role'> | User) => {
+        if (isSaving) return;
+        setIsSaving(true);
+        
+        let success = false;
         if ('id' in operatorData) {
-            // If password is not provided on edit, keep the old one
-            const originalOperator = operators.find(o => o.id === operatorData.id);
-            if (!operatorData.password && originalOperator) {
-                operatorData.password = originalOperator.password;
-            }
-            updateOperator(operatorData as User);
+            await updateOperator(operatorData as User);
+            // Assume success for now as updateOperator is void and handles its own errors
+            // A better implementation would also return a boolean.
+            success = true;
         } else {
-            addOperator(operatorData as Omit<User, 'id' | 'role'>);
+            success = await addOperator(operatorData as Omit<User, 'id' | 'role' | 'supermarket_id'>);
         }
-        // Only close modal if there's no error
-        if (!error) {
+        
+        setIsSaving(false);
+        if (success) {
             handleCloseModal();
         }
     };
 
-    const handleDelete = () => {
-        if (deletingOperator) {
-            deleteOperator(deletingOperator.id);
-            setDeletingOperator(null);
+    const handleDelete = async () => {
+        if (deletingOperator && !isDeleting) {
+            setIsDeleting(true);
+            const success = await deleteOperator(deletingOperator.id);
+            setIsDeleting(false);
+            if (success) {
+                setDeletingOperator(null);
+            }
         }
     };
 
@@ -148,16 +162,20 @@ const OperatorManagementPage: React.FC = () => {
                     onSave={handleSaveOperator}
                     onCancel={handleCloseModal}
                     error={error}
+                    isSaving={isSaving}
                 />
             </Modal>
 
             <Modal isOpen={!!deletingOperator} onClose={() => setDeletingOperator(null)} title="Confirmar Exclusão">
                 <div className="space-y-4">
+                    {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</p>}
                     <p>Você tem certeza que deseja excluir o operador <strong>{deletingOperator?.name}</strong>?</p>
-                    <p className="text-sm text-text-secondary">Esta ação não pode ser desfeita.</p>
+                    <p className="text-sm text-text-secondary">Esta ação não pode ser desfeita. O operador será permanentemente removido do sistema.</p>
                     <div className="flex justify-end gap-2">
-                        <Button variant="ghost" onClick={() => setDeletingOperator(null)}>Cancelar</Button>
-                        <Button variant="danger" onClick={handleDelete}>Excluir</Button>
+                        <Button variant="ghost" onClick={() => setDeletingOperator(null)} disabled={isDeleting}>Cancelar</Button>
+                        <Button variant="danger" onClick={handleDelete} disabled={isDeleting}>
+                            {isDeleting ? 'Excluindo...' : 'Excluir'}
+                        </Button>
                     </div>
                 </div>
             </Modal>

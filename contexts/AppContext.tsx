@@ -30,9 +30,9 @@ interface AppContextType {
   deleteProduct: (productId: string) => Promise<void>;
   bulkUpdateProducts: (payload: BulkUpdatePayload) => Promise<void>;
   addCustomer: (customerData: Omit<Customer, 'id' | 'points' | 'supermarket_id'>) => Promise<Customer | null>;
-  addOperator: (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>) => Promise<void>;
+  addOperator: (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>) => Promise<boolean>;
   updateOperator: (operator: User) => Promise<void>;
-  deleteOperator: (operatorId: string) => Promise<void>;
+  deleteOperator: (operatorId: string) => Promise<boolean>;
   updateSupermarket: (supermarketData: Supermarket) => Promise<void>;
   clearError: () => void;
 }
@@ -252,22 +252,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return data;
     };
 
-    const addOperator = async (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>) => {
+    const addOperator = async (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>): Promise<boolean> => {
         setError(null);
         if (!supermarket) {
             setError("Nenhum supermercado encontrado para associar o operador.");
-            return;
+            return false;
         }
 
-        // Preserve the owner's session to restore it after the operator sign-up.
         const { data: { session: ownerSession } } = await supabase.auth.getSession();
         if (!ownerSession) {
             setError("Sessão do proprietário inválida. Por favor, faça login novamente.");
-            return;
+            return false;
         }
 
-        // Sign up the new operator. The trigger will handle creating their profile.
-        // We pass the supermarket_id so the trigger can link them correctly.
         const { data: { user: newOperatorUser }, error: signUpError } = await supabase.auth.signUp({
             email: operatorData.email,
             password: operatorData.password as string,
@@ -275,21 +272,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 data: {
                     name: operatorData.name,
                     role: UserRole.Operator,
-                    supermarket_id: supermarket.id // Crucial: pass the ID to the trigger
+                    supermarket_id: supermarket.id
                 }
             }
         });
 
-        // Restore the owner's session immediately.
         await supabase.auth.setSession(ownerSession);
 
         if (signUpError) {
             setError(`Falha ao criar operador: ${signUpError.message}`);
-            return;
+            return false;
         }
         if (!newOperatorUser) {
             setError("Não foi possível criar o operador, usuário não retornado.");
-            return;
+            return false;
         }
         
         const newOperatorProfile: User = {
@@ -301,6 +297,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
 
         setUsers(prev => [...prev, newOperatorProfile]);
+        return true;
     };
 
     const updateOperator = async (updatedOperator: User) => {
@@ -310,13 +307,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (data) setUsers(prev => prev.map(u => u.id === data.id ? data : u));
     };
 
-    const deleteOperator = async (operatorId: string) => {
-        // Deleting from auth.users requires admin privileges and should be done in a serverless function.
-        // For this client-side app, we'll just remove them from our public table.
-        console.warn(`Operator ${operatorId} removed from public.users table, but not from auth.users.`);
-        const { error } = await supabase.from('users').delete().eq('id', operatorId);
-        if (error) return console.error(error);
+    const deleteOperator = async (operatorId: string): Promise<boolean> => {
+        setError(null);
+        const { error: rpcError } = await supabase.rpc('delete_operator', { 
+            operator_id_to_delete: operatorId 
+        });
+
+        if (rpcError) {
+            console.error("Error deleting operator:", rpcError);
+            setError(`Falha ao excluir operador: ${rpcError.message}`);
+            return false;
+        }
+
         setUsers(prev => prev.filter(u => u.id !== operatorId));
+        return true;
     };
 
     const updateSupermarket = async (supermarketData: Supermarket) => {
