@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supermarket-saas-pos-v1';
+const CACHE_NAME = 'supermarket-saas-pos-v2'; // Bump version to force update
 const CACHE_FILES = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const CACHE_FILES = [
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/recharts/umd/Recharts.min.js',
   'https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://aistudiocdn.com/@google/genai@^1.22.0',
   'https://aistudiocdn.com/react@^19.2.0'
 ];

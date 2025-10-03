@@ -234,14 +234,17 @@ const POSPage: React.FC = () => {
     const cartTotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
 
     const handleFinalizeSale = () => {
-        if (cart.length === 0 || !user) return;
+        // Fix: Added check for supermarket as its ID is required.
+        if (cart.length === 0 || !user || !supermarket) return;
 
+        // Fix: Corrected property names to snake_case and added missing supermarket_id to match Sale type.
         const saleForReceipt: Sale = {
             id: `receipt-${Date.now()}`,
+            supermarket_id: supermarket.id,
             items: cart,
             total: cartTotal,
-            customerId: selectedCustomer?.id,
-            operatorId: user.id,
+            customer_id: selectedCustomer?.id,
+            operator_id: user.id,
             timestamp: new Date().toISOString()
         };
 
@@ -250,15 +253,16 @@ const POSPage: React.FC = () => {
             operatorName: user.name,
         });
         
+        // Fix: Corrected property name to snake_case to match expected type for addSale.
         addSale({
             items: cart,
             total: cartTotal,
-            customerId: selectedCustomer?.id
+            customer_id: selectedCustomer?.id
         }, user.id);
         
-        const cashFlowEntry: CashFlowEntry = {
-            id: `sale-${new Date().toISOString()}`,
-            type: 'sale',
+        // Fix: Removed explicit type and 'id' property to match the expected argument type of addCashFlow.
+        const cashFlowEntry = {
+            type: 'sale' as const,
             amount: cartTotal,
             timestamp: new Date().toISOString(),
             description: `Venda #${new Date().toISOString().substring(11, 16)}`
@@ -278,9 +282,9 @@ const POSPage: React.FC = () => {
         const amount = parseFloat(sangriaAmount);
         if (isNaN(amount) || amount <= 0) return;
         
-        const cashFlowEntry: CashFlowEntry = {
-            id: `sangria-${new Date().toISOString()}`,
-            type: 'sangria',
+        // Fix: Removed explicit type and 'id' property to match the expected argument type of addCashFlow.
+        const cashFlowEntry = {
+            type: 'sangria' as const,
             amount: -amount,
             timestamp: new Date().toISOString(),
             description: 'Sangria do caixa'

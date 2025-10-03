@@ -9,8 +9,6 @@ export interface DemandForecast {
   reasoning: string;
 }
 
-import { StringifyOptions } from "querystring";
-
 export enum UserRole {
   Owner = 'owner',
   Operator = 'operator',
@@ -18,13 +16,16 @@ export enum UserRole {
 
 export interface User {
   id: string;
+  supermarket_id: string;
   name: string;
   email: string;
   role: UserRole;
-  password?: string; // Should be handled securely on a real backend
+  password?: string; // Usado apenas para criação, não será armazenado no estado.
 }
 
 export interface Supermarket {
+  id: string;
+  owner_id: string;
   name: string;
   logo: string | null;
   theme: 'light' | 'dark' | 'green';
@@ -36,6 +37,7 @@ export interface Supermarket {
 
 export interface Product {
   id: string;
+  supermarket_id: string;
   name: string;
   price: number;
   stock: number;
@@ -49,15 +51,18 @@ export interface CartItem extends Product {
 
 export interface Sale {
   id: string;
+  supermarket_id: string;
   items: CartItem[];
   total: number;
   timestamp: string;
-  operatorId: string;
-  customerId?: string;
+  operator_id: string;
+  customer_id?: string;
 }
 
 export interface CashFlowEntry {
   id: string;
+  supermarket_id: string;
+  operator_id: string;
   type: 'sale' | 'sangria' | 'initial';
   amount: number;
   timestamp: string;
@@ -65,6 +70,8 @@ export interface CashFlowEntry {
 }
 
 export interface DailyReport {
+    id: string;
+    supermarket_id: string;
     date: string;
     totalSales: number;
     initialCash: number;
@@ -76,6 +83,7 @@ export interface DailyReport {
 
 export interface Customer {
     id: string;
+    supermarket_id: string;
     name: string;
     cpf: string;
     points: number;
