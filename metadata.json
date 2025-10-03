@@ -1,0 +1,8 @@
+{
+  "name": "Supermarket SaaS POS",
+  "description": "A complete SaaS system for supermarket checkouts, featuring owner and operator roles, sales management, cash flow control, and an advanced dashboard with AI-powered analytics.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
