@@ -5,6 +5,7 @@ import App from './App';
 import { AppProvider } from './contexts/AppContext';
 
 // Register Service Worker for PWA functionality
+/*
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(registration => {
@@ -14,6 +15,7 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+*/
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
