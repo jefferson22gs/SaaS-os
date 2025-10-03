@@ -129,14 +129,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => {
         setError(null);
-        // Step 1: Sign up the new user. The trigger will create their profile in public.users.
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Step 1: Sign up the new user.
+        // We pass all necessary data in the 'options.data' field.
+        // The database trigger 'on_auth_user_created' will handle creating the user profile,
+        // the supermarket, and linking them together in a single atomic transaction.
+        const { error: authError } = await supabase.auth.signUp({
             email: ownerData.email,
             password: ownerData.password as string,
             options: {
                 data: {
                     name: ownerData.name,
-                    role: UserRole.Owner // Pass metadata for the trigger to use
+                    role: UserRole.Owner,
+                    supermarket_data: supermarketData // Pass supermarket data to the trigger
                 }
             }
         });
@@ -147,28 +151,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             } else if (authError.message.toLowerCase().includes('user already registered')) {
                 setError("Este email já está cadastrado. Por favor, use um email diferente ou faça login.");
             } else {
-                setError(authError.message);
+                 setError(`Falha no cadastro: ${authError.message}. Verifique os dados e tente novamente.`);
             }
             return;
         }
-        
-        if (!authData.user) {
-            return setError("Não foi possível criar a conta de usuário.");
-        }
 
-        // Step 2: Call the RPC function to create the supermarket and link it to the owner.
-        // This is the key part of the fix.
-        const { error: rpcError } = await supabase
-            .rpc('create_supermarket_and_link_owner', { supermarket_data: supermarketData });
-
-        if (rpcError) {
-            // Provide a clear error message. In a real scenario, you might want to delete the created auth user.
-            setError(`A conta foi criada, mas falhou ao registrar o supermercado: ${rpcError.message}. Por favor, contate o suporte.`);
-            console.error("RPC Error:", rpcError);
-            return;
-        }
-
-        // The onAuthStateChange listener will handle setting the user and supermarket state automatically.
+        // On success, the onAuthStateChange listener will handle setting the user and supermarket state
+        // after the user confirms their email and logs in. For now, we just let the flow complete.
+        // A message to check email could be shown here if desired.
     };
 
     const addSale = async (saleData: Omit<Sale, 'id' | 'timestamp' | 'operator_id' | 'supermarket_id'>, operatorId: string) => {
