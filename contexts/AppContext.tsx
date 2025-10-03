@@ -21,7 +21,7 @@ interface AppContextType {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => Promise<void>;
+  register: (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => Promise<boolean>;
   addSale: (sale: Omit<Sale, 'id' | 'timestamp' | 'operator_id' | 'supermarket_id'>, operatorId: string) => Promise<void>;
   addCashFlow: (entry: Omit<CashFlowEntry, 'id' | 'supermarket_id' | 'operator_id'>) => Promise<void>;
   closeShift: () => Promise<void>;
@@ -127,12 +127,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUser(null);
     };
 
-    const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => {
+    const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>): Promise<boolean> => {
         setError(null);
-        // Step 1: Sign up the new user.
-        // We pass all necessary data in the 'options.data' field.
-        // The database trigger 'on_auth_user_created' will handle creating the user profile,
-        // the supermarket, and linking them together in a single atomic transaction.
         const { error: authError } = await supabase.auth.signUp({
             email: ownerData.email,
             password: ownerData.password as string,
@@ -140,25 +136,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 data: {
                     name: ownerData.name,
                     role: UserRole.Owner,
-                    supermarket_data: supermarketData // Pass supermarket data to the trigger
+                    supermarket_data: supermarketData
                 }
             }
         });
 
         if (authError) {
-            if (authError.message.includes('For security purposes')) {
-                setError("Muitas tentativas. Por favor, aguarde um minuto e tente novamente.");
+            // @ts-ignore - The error object from Supabase has a status property.
+            if (authError.status === 429 || authError.message.includes('For security purposes')) {
+                setError("Muitas tentativas de cadastro foram detectadas. Por segurança, aguarde alguns minutos antes de tentar novamente.");
             } else if (authError.message.toLowerCase().includes('user already registered')) {
                 setError("Este email já está cadastrado. Por favor, use um email diferente ou faça login.");
             } else {
                  setError(`Falha no cadastro: ${authError.message}. Verifique os dados e tente novamente.`);
             }
-            return;
+            return false;
         }
-
-        // On success, the onAuthStateChange listener will handle setting the user and supermarket state
-        // after the user confirms their email and logs in. For now, we just let the flow complete.
-        // A message to check email could be shown here if desired.
+        
+        return true;
     };
 
     const addSale = async (saleData: Omit<Sale, 'id' | 'timestamp' | 'operator_id' | 'supermarket_id'>, operatorId: string) => {

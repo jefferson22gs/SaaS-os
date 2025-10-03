@@ -54,6 +54,7 @@ export const RegisterPage: React.FC = () => {
     const [address, setAddress] = useState('');
     const [phone, setPhone] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -75,12 +76,30 @@ export const RegisterPage: React.FC = () => {
         e.preventDefault();
         if (loading) return;
         setLoading(true);
-        await register(
+        clearError();
+        const success = await register(
             { name: ownerName, email, password },
             { name: supermarketName, logo, theme, cnpj, ie, address, phone }
         );
         setLoading(false);
+        if (success) {
+            setIsSuccess(true);
+        }
     };
+
+    if (isSuccess) {
+        return (
+           <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
+               <Card className="w-full max-w-lg text-center p-8">
+                   <h2 className="text-3xl font-bold mb-4 text-secondary">Cadastro realizado com sucesso!</h2>
+                   <p className="text-text-secondary mb-6 text-lg">
+                       Enviamos um email de confirmação para <strong>{email}</strong>. Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta.
+                   </p>
+                   <a href="#/" className="font-semibold text-primary hover:underline">Voltar para a tela de Login</a>
+               </Card>
+           </div>
+       );
+   }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
