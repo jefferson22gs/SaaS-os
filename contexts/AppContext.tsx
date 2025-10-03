@@ -259,42 +259,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const addOperator = async (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>) => {
         setError(null);
-        if (!supermarket) return;
+        if (!supermarket) {
+            setError("Nenhum supermercado encontrado para associar o operador.");
+            return;
+        }
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return setError("Você precisa estar logado como proprietário.");
+        // Preserve the owner's session to restore it after the operator sign-up.
+        const { data: { session: ownerSession } } = await supabase.auth.getSession();
+        if (!ownerSession) {
+            setError("Sessão do proprietário inválida. Por favor, faça login novamente.");
+            return;
+        }
 
-        // The trigger now handles inserting name and role, so we just sign up.
-        const { data: newUser, error: signUpError } = await supabase.auth.signUp({
+        // Sign up the new operator. The trigger will handle creating their profile.
+        // We pass the supermarket_id so the trigger can link them correctly.
+        const { data: { user: newOperatorUser }, error: signUpError } = await supabase.auth.signUp({
             email: operatorData.email,
             password: operatorData.password as string,
             options: {
                 data: {
                     name: operatorData.name,
-                    role: UserRole.Operator
+                    role: UserRole.Operator,
+                    supermarket_id: supermarket.id // Crucial: pass the ID to the trigger
                 }
             }
         });
-        if (signUpError) return setError(signUpError.message);
-        if (!newUser.user) return setError("Não foi possível criar o operador.");
 
-        // We now only need to update the supermarket_id.
-        const { error: profileError } = await supabase.from('users').update({
-            supermarket_id: supermarket.id
-        }).eq('id', newUser.user.id);
+        // Restore the owner's session immediately.
+        await supabase.auth.setSession(ownerSession);
 
-        if (profileError) return setError(profileError.message);
+        if (signUpError) {
+            setError(`Falha ao criar operador: ${signUpError.message}`);
+            return;
+        }
+        if (!newOperatorUser) {
+            setError("Não foi possível criar o operador, usuário não retornado.");
+            return;
+        }
         
-        setUsers(prev => [...prev, {
-            id: newUser.user!.id,
-            email: newUser.user!.email!,
+        const newOperatorProfile: User = {
+            id: newOperatorUser.id,
+            email: newOperatorUser.email!,
             name: operatorData.name,
             role: UserRole.Operator,
             supermarket_id: supermarket.id
-        }]);
+        };
 
-        // Restore owner session
-        await supabase.auth.setSession(session);
+        setUsers(prev => [...prev, newOperatorProfile]);
     };
 
     const updateOperator = async (updatedOperator: User) => {
