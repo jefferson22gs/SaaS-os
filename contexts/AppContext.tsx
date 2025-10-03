@@ -119,7 +119,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const login = async (email: string, password: string) => {
         setError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) setError(error.message);
+        if (error) setError("Email ou senha inválidos.");
     };
 
     const logout = async () => {
@@ -129,20 +129,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>) => {
         setError(null);
+        // Step 1: Sign up the new user. The trigger will create their profile in public.users.
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: ownerData.email,
             password: ownerData.password as string,
             options: {
                 data: {
                     name: ownerData.name,
-                    role: UserRole.Owner
+                    role: UserRole.Owner // Pass metadata for the trigger to use
                 }
             }
         });
 
         if (authError) {
             if (authError.message.includes('For security purposes')) {
-                setError("Muitas tentativas de cadastro. Por favor, aguarde um minuto antes de tentar novamente.");
+                setError("Muitas tentativas. Por favor, aguarde um minuto e tente novamente.");
             } else if (authError.message.toLowerCase().includes('user already registered')) {
                 setError("Este email já está cadastrado. Por favor, use um email diferente ou faça login.");
             } else {
@@ -151,20 +152,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return;
         }
         
-        if (!authData.user) return setError("Não foi possível criar o usuário.");
+        if (!authData.user) {
+            return setError("Não foi possível criar a conta de usuário.");
+        }
 
-        const { data: smData, error: smError } = await supabase.from('supermarkets').insert({ ...supermarketData, owner_id: authData.user.id }).select().single();
-        if (smError) {
-            if (smError.message.includes('violates row-level security policy')) {
-                setError("Erro de permissão no banco de dados. Verifique as políticas de segurança (RLS) para a tabela 'supermarkets' e tente novamente.");
-            } else {
-                setError(smError.message);
-            }
+        // Step 2: Call the RPC function to create the supermarket and link it to the owner.
+        // This is the key part of the fix.
+        const { error: rpcError } = await supabase
+            .rpc('create_supermarket_and_link_owner', { supermarket_data: supermarketData });
+
+        if (rpcError) {
+            // Provide a clear error message. In a real scenario, you might want to delete the created auth user.
+            setError(`A conta foi criada, mas falhou ao registrar o supermercado: ${rpcError.message}. Por favor, contate o suporte.`);
+            console.error("RPC Error:", rpcError);
             return;
         }
 
-        const { error: profileError } = await supabase.from('users').update({ supermarket_id: smData.id }).eq('id', authData.user.id);
-        if (profileError) return setError(profileError.message);
+        // The onAuthStateChange listener will handle setting the user and supermarket state automatically.
     };
 
     const addSale = async (saleData: Omit<Sale, 'id' | 'timestamp' | 'operator_id' | 'supermarket_id'>, operatorId: string) => {
@@ -270,7 +274,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return setError("Você precisa estar logado como proprietário.");
 
-        // Pass metadata during sign-up to be used by the database trigger.
+        // The trigger now handles inserting name and role, so we just sign up.
         const { data: newUser, error: signUpError } = await supabase.auth.signUp({
             email: operatorData.email,
             password: operatorData.password as string,
@@ -284,7 +288,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (signUpError) return setError(signUpError.message);
         if (!newUser.user) return setError("Não foi possível criar o operador.");
 
-        // The trigger now handles inserting name and role. We only need to update the supermarket_id.
+        // We now only need to update the supermarket_id.
         const { error: profileError } = await supabase.from('users').update({
             supermarket_id: supermarket.id
         }).eq('id', newUser.user.id);
