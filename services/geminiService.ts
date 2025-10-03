@@ -3,19 +3,29 @@ import { DailyReport, Product, Sale } from '../types';
 
 // API Key is managed externally through environment variables
 const API_KEY = process.env.API_KEY;
+let ai: GoogleGenAI | null = null;
 
-if (!API_KEY) {
-  console.warn("API_KEY for Gemini is not set. AI features will be disabled.");
+// Lazily initialize the GoogleGenAI instance to prevent app crash on load
+// if the API key is not available in the environment.
+const getAiInstance = (): GoogleGenAI | null => {
+    if (ai) {
+        return ai;
+    }
+    if (API_KEY) {
+        ai = new GoogleGenAI({ apiKey: API_KEY });
+        return ai;
+    }
+    console.warn("API_KEY for Gemini is not set. AI features will be disabled.");
+    return null;
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
 const callGemini = async (prompt: string, config?: any): Promise<string> => {
-    if (!API_KEY) {
+    const aiInstance = getAiInstance();
+    if (!aiInstance) {
         return "A funcionalidade de IA está desativada. Configure a chave de API do Gemini para ativá-la.";
     }
     try {
-        const response = await ai.models.generateContent({
+        const response = await aiInstance.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             ...config

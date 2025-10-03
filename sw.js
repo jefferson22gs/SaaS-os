@@ -4,8 +4,6 @@ const CACHE_FILES = [
   '/index.html',
   '/index.tsx',
   '/manifest.json',
-  '/assets/icon-192x192.png',
-  '/assets/icon-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/recharts/umd/Recharts.min.js',
   'https://unpkg.com/@zxing/browser@0.1.5/umd/zxing-browser.min.js',
