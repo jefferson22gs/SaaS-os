@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { User, Supermarket, Product, Sale, CashFlowEntry, DailyReport, UserRole, Customer } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -54,12 +55,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
-                const { data: userProfile } = await supabase
+                const { data: userProfile, error: profileError } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', session.user.id)
                     .single();
-                setUser(userProfile as User | null);
+
+                if (profileError) {
+                    console.error("Error fetching user profile:", profileError);
+                    setError("Não foi possível carregar os dados do seu perfil. Verifique sua conexão e tente fazer login novamente.");
+                    await supabase.auth.signOut();
+                    setUser(null);
+                } else {
+                    setUser(userProfile as User | null);
+                }
             } else {
                 setUser(null);
             }
@@ -119,7 +128,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const login = async (email: string, password: string) => {
         setError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) setError("Email ou senha inválidos.");
+        if (error) {
+            if (error.message.includes('Email not confirmed')) {
+                setError('Seu email ainda não foi confirmado. Por favor, verifique sua caixa de entrada e clique no link de confirmação.');
+            } else {
+                setError("Email ou senha inválidos.");
+            }
+        }
     };
 
     const logout = async () => {
@@ -129,20 +144,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>): Promise<boolean> => {
         setError(null);
-        const { error: authError } = await supabase.auth.signUp({
+
+        // 1. Sign up the user in Supabase Auth to get a user ID
+        const { data: authData, error: authError } = await supabase.auth.signUp({
             email: ownerData.email,
             password: ownerData.password as string,
-            options: {
-                data: {
-                    name: ownerData.name,
-                    role: UserRole.Owner,
-                    supermarket_data: supermarketData
-                }
-            }
         });
 
         if (authError) {
-            // @ts-ignore - The error object from Supabase has a status property.
+             // @ts-ignore - The error object from Supabase has a status property.
             if (authError.status === 429 || authError.message.includes('For security purposes')) {
                 setError("Muitas tentativas de cadastro foram detectadas. Por segurança, aguarde alguns minutos antes de tentar novamente.");
             } else if (authError.message.toLowerCase().includes('user already registered')) {
@@ -150,6 +160,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             } else {
                  setError(`Falha no cadastro: ${authError.message}. Verifique os dados e tente novamente.`);
             }
+            return false;
+        }
+
+        if (!authData.user) {
+            setError("Ocorreu um erro inesperado e o usuário não foi criado. Tente novamente.");
+            return false;
+        }
+
+        const ownerId = authData.user.id;
+
+        // 2. Create the supermarket, linking it to the new owner's ID
+        const { data: smData, error: smError } = await supabase
+            .from('supermarkets')
+            .insert({ ...supermarketData, owner_id: ownerId })
+            .select()
+            .single();
+
+        if (smError || !smData) {
+            setError(`Erro ao criar supermercado: ${smError?.message || 'Dados não retornados.'}`);
+            // In a real app, you might want to delete the auth user here for cleanup
+            return false;
+        }
+
+        // 3. Create the user's public profile in the 'users' table
+        const { error: profileError } = await supabase
+            .from('users')
+            .insert({
+                id: ownerId,
+                name: ownerData.name,
+                email: ownerData.email,
+                role: UserRole.Owner,
+                supermarket_id: smData.id
+            });
+        
+        if (profileError) {
+             setError(`Erro ao criar perfil de usuário: ${profileError.message}`);
+             // Cleanup might be needed here as well
             return false;
         }
         
