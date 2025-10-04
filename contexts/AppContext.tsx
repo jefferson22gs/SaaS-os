@@ -66,13 +66,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     .single();
 
                 if (profileError) {
-                    console.error("Error fetching user profile:", profileError);
-                    if (profileError.message.toLowerCase().includes('failed to fetch')) {
-                        setError("Falha de conexão com o banco de dados (Erro de CORS). Verifique se o domínio deste aplicativo está autorizado nas configurações de API do seu projeto Supabase.");
+                    console.error("Error fetching user profile:", JSON.stringify(profileError, null, 2));
+                    
+                    let detailedError;
+                    // The message is often the raw response body from the proxy/server. Check for the specific Cloudflare error.
+                    if (profileError.message && profileError.message.includes('Request Header Or Cookie Too Large')) {
+                        detailedError = "Falha ao carregar perfil: O cabeçalho da requisição ou o cookie de sessão está muito grande. Isso pode ser causado por dados de usuário (metadata) muito extensos no Supabase ou por cookies corrompidos. Por favor, tente limpar os dados do site (cache e cookies) no seu navegador e fazer login novamente.";
                     } else {
-                        setError("Login efetuado, mas não foi possível carregar seu perfil. Isso pode ser um problema de conexão. Você foi desconectado, por favor, tente novamente.");
+                        detailedError = `Erro ao carregar perfil: ${profileError.message}.`;
+                        detailedError += " Isso geralmente indica um problema com o proxy (Cloudflare Worker) que está corrompendo a requisição. Verifique o código do seu worker.";
                     }
-                    await supabase.auth.signOut();
+
+                    setError(detailedError);
+
+                    await supabase.auth.signOut().catch(signOutError => {
+                        console.error("Sign out failed after profile fetch error:", signOutError);
+                    });
                     setUser(null);
                 } else {
                     setUser(userProfile as User | null);
