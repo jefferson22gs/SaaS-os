@@ -53,6 +53,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // --- Auth Listener ---
     useEffect(() => {
+        if (!supabase) {
+            setError("SETUP_REQUIRED:PROXY_URL");
+            return;
+        }
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 const { data: userProfile, error: profileError } = await supabase
@@ -63,7 +67,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 if (profileError) {
                     console.error("Error fetching user profile:", profileError);
-                    setError("Não foi possível carregar os dados do seu perfil. Verifique sua conexão e tente fazer login novamente.");
+                    if (profileError.message.toLowerCase().includes('failed to fetch')) {
+                        setError("Falha de conexão com o banco de dados (Erro de CORS). Verifique se o domínio deste aplicativo está autorizado nas configurações de API do seu projeto Supabase.");
+                    } else {
+                        setError("Login efetuado, mas não foi possível carregar seu perfil. Isso pode ser um problema de conexão. Você foi desconectado, por favor, tente novamente.");
+                    }
                     await supabase.auth.signOut();
                     setUser(null);
                 } else {
@@ -79,7 +87,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // --- Data Fetching ---
     useEffect(() => {
         const fetchData = async () => {
-            if (user && user.supermarket_id) {
+            if (user && user.supermarket_id && supabase) {
                 // Fetch supermarket details
                 const { data: smData } = await supabase.from('supermarkets').select('*').eq('id', user.supermarket_id).single();
                 setSupermarket(smData as Supermarket);
@@ -126,11 +134,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const clearError = useCallback(() => setError(null), []);
 
     const login = async (email: string, password: string) => {
+        if (!supabase) return;
         setError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
             if (error.message.includes('Email not confirmed')) {
-                setError('Seu email ainda não foi confirmado. Por favor, verifique sua caixa de entrada e clique no link de confirmação.');
+                setError('Seu email ainda não foi confirmado. Por favor, verifique sua caixa de entrada e clique no link de confirmação para ativar sua conta.');
             } else {
                 setError("Email ou senha inválidos.");
             }
@@ -138,11 +147,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const logout = async () => {
+        if (!supabase) return;
         await supabase.auth.signOut();
         setUser(null);
     };
 
     const register = async (ownerData: Omit<User, 'id' | 'role' | 'supermarket_id'>, supermarketData: Omit<Supermarket, 'id' | 'owner_id'>): Promise<boolean> => {
+        if (!supabase) return false;
         setError(null);
 
         // 1. Sign up the user in Supabase Auth to get a user ID
@@ -204,7 +215,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addSale = async (saleData: Omit<Sale, 'id' | 'timestamp' | 'operator_id' | 'supermarket_id'>, operatorId: string) => {
-        if (!supermarket || !user) return;
+        if (!supermarket || !user || !supabase) return;
         const newSale = { ...saleData, supermarket_id: supermarket.id, operator_id: operatorId, timestamp: new Date().toISOString() };
         const { data: insertedSale, error } = await supabase.from('sales').insert(newSale).select().single();
         if (error) return console.error(error);
@@ -226,7 +237,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const addCashFlow = async (entry: Omit<CashFlowEntry, 'id' | 'supermarket_id' | 'operator_id'>) => {
-        if (!supermarket || !user) return;
+        if (!supermarket || !user || !supabase) return;
         const newEntry = { ...entry, supermarket_id: supermarket.id, operator_id: user.id };
         const { data, error } = await supabase.from('cash_flow_entries').insert(newEntry).select().single();
         if (error) return console.error(error);
@@ -234,7 +245,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const closeShift = async () => {
-         if (!supermarket) return;
+         if (!supermarket || !supabase) return;
         const initialCash = cashFlow.find(cf => cf.type === 'initial')?.amount || 0;
         const totalSalesValue = sales.reduce((sum, s) => sum + s.total, 0);
         const totalSangria = cashFlow.filter(cf => cf.type === 'sangria').reduce((sum, s) => sum + s.amount, 0);
@@ -257,7 +268,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addProduct = async (productData: Omit<Product, 'id' | 'lowStockThreshold' | 'supermarket_id'>) => {
-        if (!supermarket) return;
+        if (!supermarket || !supabase) return;
         const newProduct = { ...productData, supermarket_id: supermarket.id, lowStockThreshold: 10 };
         const { data, error } = await supabase.from('products').insert(newProduct).select().single();
         if (error) return console.error(error);
@@ -265,18 +276,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateProduct = async (updatedProduct: Product) => {
+        if (!supabase) return;
         const { data, error } = await supabase.from('products').update(updatedProduct).eq('id', updatedProduct.id).select().single();
         if (error) return console.error(error);
         if (data) setProducts(prev => prev.map(p => p.id === data.id ? data : p));
     };
 
     const deleteProduct = async (productId: string) => {
+        if (!supabase) return;
         const { error } = await supabase.from('products').delete().eq('id', productId);
         if (error) return console.error(error);
         setProducts(prev => prev.filter(p => p.id !== productId));
     };
 
     const bulkUpdateProducts = async (payload: BulkUpdatePayload) => {
+        if (!supabase) return;
         const { productIds, price, stock } = payload;
         // This is complex logic that is best handled in a database function (RPC call) for atomicity and performance.
         // For client-side, we have to fetch and update, which is not ideal.
@@ -291,7 +305,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const addCustomer = async (customerData: Omit<Customer, 'id' | 'points' | 'supermarket_id'>) => {
-        if (!supermarket) return null;
+        if (!supermarket || !supabase) return null;
         const newCustomer = { ...customerData, supermarket_id: supermarket.id, points: 0 };
         const { data, error } = await supabase.from('customers').insert(newCustomer).select().single();
         if (error) { console.error(error); return null; }
@@ -300,6 +314,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addOperator = async (operatorData: Omit<User, 'id' | 'role' | 'supermarket_id'>): Promise<boolean> => {
+        if (!supabase) return false;
         setError(null);
         if (!supermarket) {
             setError("Nenhum supermercado encontrado para associar o operador.");
@@ -348,6 +363,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateOperator = async (updatedOperator: User) => {
+        if (!supabase) return;
         const { name, id } = updatedOperator;
         const { data, error } = await supabase.from('users').update({ name }).eq('id', id).select().single();
         if (error) return console.error(error);
@@ -355,6 +371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteOperator = async (operatorId: string): Promise<boolean> => {
+        if (!supabase) return false;
         setError(null);
         const { error: rpcError } = await supabase.rpc('delete_operator', { 
             operator_id_to_delete: operatorId 
@@ -371,6 +388,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateSupermarket = async (supermarketData: Supermarket) => {
+        if (!supabase) return;
         const { data, error } = await supabase.from('supermarkets').update(supermarketData).eq('id', supermarketData.id).select().single();
         if (error) return console.error(error);
         if (data) setSupermarket(data);

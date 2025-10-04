@@ -1,6 +1,7 @@
 
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Button, Input, Card } from './UI';
+import { Button, Input, Card, ExclamationTriangleIcon } from './UI';
 import { useAppContext } from '../contexts/AppContext';
 
 export const LoginPage: React.FC = () => {
@@ -21,15 +22,41 @@ export const LoginPage: React.FC = () => {
         setLoading(false); // Only sets on error, which is fine as component unmounts on success
     };
 
+    const isSetupError = error === 'SETUP_REQUIRED:PROXY_URL';
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-base-200 p-4">
+            {isSetupError && (
+                 <Card className="w-full max-w-md mb-6 border-2 border-amber-400 bg-amber-50">
+                    <div className="flex items-start gap-3">
+                        <ExclamationTriangleIcon className="w-8 h-8 text-amber-500 shrink-0 mt-1" />
+                        <div>
+                            <h2 className="text-xl font-bold text-text-primary">Configuração Incompleta</h2>
+                            <p className="text-text-secondary mt-2">O aplicativo não pode se conectar ao banco de dados porque a URL do proxy do Supabase não foi configurada.</p>
+                            
+                            <h3 className="text-lg font-bold text-text-primary mt-3 mb-1">Por quê?</h3>
+                            <p className="text-text-secondary">Devido a atualizações recentes no Supabase, o acesso direto ao banco de dados pelo navegador é bloqueado por segurança (CORS). A solução é usar um "proxy" gratuito.</p>
+                            
+                            <h3 className="text-lg font-bold text-text-primary mt-3 mb-1">Como Resolver:</h3>
+                            <ol className="list-decimal list-outside space-y-1 my-2 pl-5 text-text-secondary">
+                                <li>Crie um proxy (recomendamos um <a href="https://workers.cloudflare.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Cloudflare Worker</a> gratuito).</li>
+                                <li>Use o código de proxy que foi fornecido em nossa conversa.</li>
+                                <li>Após publicar o worker, você receberá uma URL.</li>
+                                <li>Abra o arquivo <code className="bg-base-200 px-1 py-0.5 rounded text-sm">'services/supabaseClient.ts'</code>.</li>
+                                <li>Substitua o placeholder <code className="bg-base-200 px-1 py-0.5 rounded text-sm">'YOUR_PROXY_WORKER_URL_HERE'</code> pela sua URL.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
             <Card className="w-full max-w-md">
                 <h2 className="text-3xl font-bold text-center mb-6 text-text-primary">Login</h2>
-                {error && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">{error}</p>}
+                {error && !isSetupError && <p className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">{error}</p>}
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                    <Button type="submit" className="w-full !py-3" disabled={loading}>
+                    <Input label="Email" id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isSetupError} />
+                    <Input label="Senha" id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required disabled={isSetupError} />
+                    <Button type="submit" className="w-full !py-3" disabled={loading || isSetupError}>
                         {loading ? 'Entrando...' : 'Entrar'}
                     </Button>
                 </form>
