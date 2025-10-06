@@ -1,7 +1,7 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { User, Supermarket, Product, Sale, CashFlowEntry, DailyReport, UserRole, Customer } from '../types';
-import { supabase } from '../services/supabaseClient';
+import { getSupabaseClient } from '../services/supabaseClient';
 
 // --- Context Definition ---
 export interface BulkUpdatePayload {
@@ -41,6 +41,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const supabase = getSupabaseClient();
     const [user, setUser] = useState<User | null>(null);
     const [supermarket, setSupermarket] = useState<Supermarket | null>(null);
     const [users, setUsers] = useState<User[]>([]);
@@ -91,7 +92,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         });
         return () => subscription.unsubscribe();
-    }, []);
+    }, [supabase]);
 
     // --- Data Fetching ---
     useEffect(() => {
@@ -133,7 +134,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         };
         fetchData();
-    }, [user]);
+    }, [user, supabase]);
 
     // Set document theme
     useEffect(() => {
